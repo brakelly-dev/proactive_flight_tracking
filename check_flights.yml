@@ -1,0 +1,44 @@
+name: Jamboree Flight Alert Check
+
+on:
+  schedule:
+    # Runs every 30 minutes, UTC. 2026-07-18/19 ET is roughly UTC-4 (EDT).
+    # Adjust the cron window so it only runs while it's useful (saves Action minutes).
+    - cron: "*/30 6 18 7 *"   # July 18, 06:00-06:59 UTC block (example)
+    - cron: "*/30 7-23 18 7 *"
+    - cron: "*/30 0-6 19 7 *"
+    - cron: "*/30 7-23 19 7 *"
+  workflow_dispatch: {}   # lets you manually trigger a run from the Actions tab to test
+
+jobs:
+  check-flights:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed so the job can commit the updated alert-state file
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run flight check
+        env:
+          AERODATABOX_API_KEY: ${{ secrets.AERODATABOX_API_KEY }}
+          GMAIL_SENDER_ADDRESS: ${{ secrets.GMAIL_SENDER_ADDRESS }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          ALERT_EMAIL_RECIPIENTS: ${{ secrets.ALERT_EMAIL_RECIPIENTS }}
+          SMS_GATEWAY_RECIPIENTS: ${{ secrets.SMS_GATEWAY_RECIPIENTS }}
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        run: python check_and_alert.py
+
+      - name: Commit updated alert state
+        run: |
+          git config user.name "flight-alert-bot"
+          git config user.email "actions@github.com"
+          git add data/alert_state.json
+          git diff --quiet --cached || git commit -m "Update alert state [skip ci]"
+          git push
